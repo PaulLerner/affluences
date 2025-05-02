@@ -4,7 +4,6 @@ from jsonargparse import CLI
 from jsonargparse.typing import register_type
 import warnings
 import time
-import datetime
 from pathlib import Path
 
 import requests
@@ -52,9 +51,6 @@ def main(url: str, output: Path = None, interval: float = 60.0*10.0):
             timestamp=time.time()
             with open(output, "at") as file:
                 file.write(f"{value},{timestamp}\n")
-            #date = datetime.datetime.fromtimestamp(timestamp)
-           # weekday = datetime.datetime.isoweekday(date)
-           # print(timestamp, date, weekday)
         time.sleep(interval)
 
 
