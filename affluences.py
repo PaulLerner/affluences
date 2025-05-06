@@ -8,9 +8,37 @@ from pathlib import Path
 
 import requests
 from bs4 import BeautifulSoup
+from urllib.error import HTTPError
+from urllib3.exceptions import MaxRetryError
 
 
 register_type(Path)
+
+def request(query, session, tries=0, max_tries=2):
+    """GET query via requests, handles exceptions and returns None if something went wrong"""
+    response = None
+    base_msg = f"Something went wrong when requesting for '{query}':\n"
+    if tries >= max_tries:
+        raise MaxRetryError(f"{base_msg}Maximum number of tries ({max_tries}) exceeded: {tries}")
+    try:
+        response = session.get(query, headers={'User-Agent':'affluences bot 0.1'})
+    except requests.exceptions.ConnectionError as e:
+        warnings.warn(f"{base_msg}requests.exceptions.ConnectionError: {e}")
+    except MaxRetryError as e:
+        warnings.warn(f"{base_msg}MaxRetryError: {e}")
+    except OSError as e:
+        warnings.warn(f"{base_msg}OSError: {e}")
+    except Exception as e:
+        warnings.warn(f"{base_msg}Exception: {e}")
+
+    if response is not None and response.status_code != requests.codes.ok:
+        if response.status_code == 429:
+            time.sleep(int(response.headers.get("Retry-After", 1)))
+            return request(query, session, tries+1, max_tries=max_tries)
+        warnings.warn(f"{base_msg}status code: {response.status_code}")
+        response = None
+
+    return response
 
 
 def get_value(soup):
@@ -33,12 +61,12 @@ def get_value(soup):
 
 
 def main(url: str, output: Path = None, interval: float = 60.0*10.0):
-    #url = "https://affluences.com/piscine-de-la-butte-aux-cailles"
+    session = requests.Session()
     if output is None:
         output = Path(f'{url.split("/")[-1]}.csv')
     while True:
+        result = request(url, session)
         try:
-            result = requests.get(url)
             soup = BeautifulSoup(result.text)
         except Exception as e:
             warnings.warn(f"caught Exception {e}")
