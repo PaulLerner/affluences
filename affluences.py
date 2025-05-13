@@ -4,6 +4,7 @@ from jsonargparse import CLI
 from jsonargparse.typing import register_type
 import warnings
 import time
+import datetime
 from pathlib import Path
 
 import requests
@@ -14,12 +15,13 @@ from urllib3.exceptions import MaxRetryError
 
 register_type(Path)
 
-def request(query, session, tries=0, max_tries=2):
+
+def request(query, session, tries=0, max_tries=100, sleep_time: float = 60.0*10.0):
     """GET query via requests, handles exceptions and returns None if something went wrong"""
     response = None
-    base_msg = f"Something went wrong when requesting for '{query}':\n"
+    base_msg = f"{datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')}: Something went wrong when requesting for '{query}':\n"
     if tries >= max_tries:
-        raise MaxRetryError(f"{base_msg}Maximum number of tries ({max_tries}) exceeded: {tries}")
+        raise RuntimeError(f"{base_msg}Maximum number of tries ({max_tries}) exceeded: {tries}")
     try:
         response = session.get(query, headers={'User-Agent':'affluences bot 0.1'})
     except requests.exceptions.ConnectionError as e:
@@ -31,13 +33,15 @@ def request(query, session, tries=0, max_tries=2):
     except Exception as e:
         warnings.warn(f"{base_msg}Exception: {e}")
 
-    if response is not None and response.status_code != requests.codes.ok:
-        if response.status_code == 429:
-            time.sleep(int(response.headers.get("Retry-After", 1)))
-            return request(query, session, tries+1, max_tries=max_tries)
+    if response is None:
+        time.sleep(sleep_time)
+        return request(query, session, tries+1, max_tries=max_tries, sleep_time=sleep_time)
+    elif response.status_code != requests.codes.ok:
         warnings.warn(f"{base_msg}status code: {response.status_code}")
-        response = None
-
+        if response.status_code == 429:
+            sleep_time = int(response.headers.get("Retry-After", sleep_time))
+        time.sleep(sleep_time)
+        return request(query, session, tries+1, max_tries=max_tries, sleep_time=sleep_time)
     return response
 
 
